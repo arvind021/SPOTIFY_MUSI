@@ -30,6 +30,10 @@
 # ======================================================================
 
 
+# ======================================================================
+# HEADER SAME
+# ======================================================================
+
 from typing import Union
 from pyrogram import filters, types, enums
 from pyrogram.types import InlineKeyboardMarkup, Message, InlineKeyboardButton
@@ -43,6 +47,16 @@ from config import BANNED_USERS, START_IMG_URL, SUPPORT_CHAT
 from strings import get_string, helpers
 from SPOTIFY_MUSIC.utils.stuffs.helper import Helper
 
+
+# ================= CACHE =================
+
+LANG_CACHE = {}
+STRING_CACHE = {}
+KEYBOARD_CACHE = {}
+
+# ==========================================
+
+
 HELP_MAP = {
     "1": helpers.HELP_1,
     "3": helpers.HELP_3,
@@ -55,35 +69,84 @@ HELP_MAP = {
     "15": helpers.HELP_15,
 }
 
+
+# ================= FAST LANG =================
+
+async def get_lang_cached(chat_id):
+
+    if chat_id in LANG_CACHE:
+        return LANG_CACHE[chat_id]
+
+    lang = await get_lang(chat_id)
+    LANG_CACHE[chat_id] = lang
+    return lang
+
+
+def get_string_cached(lang):
+
+    if lang in STRING_CACHE:
+        return STRING_CACHE[lang]
+
+    s = get_string(lang)
+    STRING_CACHE[lang] = s
+    return s
+
+
+def get_keyboard_cached(lang, back=False):
+
+    key = f"{lang}_{back}"
+
+    if key in KEYBOARD_CACHE:
+        return KEYBOARD_CACHE[key]
+
+    _ = get_string_cached(lang)
+    kb = help_pannel(_, back)
+
+    KEYBOARD_CACHE[key] = kb
+    return kb
+
+
+# ===========================================
+
+
 @app.on_message(filters.command(["help"]) & filters.private & ~BANNED_USERS)
 @app.on_callback_query(filters.regex("settings_back_helper") & ~BANNED_USERS)
 async def helper_private(client: app, update: Union[types.Message, types.CallbackQuery]):
+
     is_callback = isinstance(update, types.CallbackQuery)
 
     if is_callback:
+
         try:
-            await update.answer()
+            await update.answer(cache_time=60)
         except:
             pass
 
         chat_id = update.message.chat.id
-        language = await get_lang(chat_id)
-        _ = get_string(language)
 
-        keyboard = help_pannel(_, True)
+        language = await get_lang_cached(chat_id)
+        _ = get_string_cached(language)
+
+        keyboard = get_keyboard_cached(language, True)
+
         await update.edit_message_text(
-            _["help_1"].format(SUPPORT_CHAT), reply_markup=keyboard
+            _["help_1"].format(SUPPORT_CHAT),
+            reply_markup=keyboard
         )
 
     else:
+
         try:
             await update.delete()
         except:
             pass
 
-        language = await get_lang(update.chat.id)
-        _ = get_string(language)
-        keyboard = help_pannel(_)
+        chat_id = update.chat.id
+
+        language = await get_lang_cached(chat_id)
+        _ = get_string_cached(language)
+
+        keyboard = get_keyboard_cached(language, False)
 
         await update.reply_photo(
             photo=START_IMG_URL,
@@ -91,52 +154,78 @@ async def helper_private(client: app, update: Union[types.Message, types.Callbac
             reply_markup=keyboard,
         )
 
+
 @app.on_message(filters.command(["help"]) & filters.group & ~BANNED_USERS)
 @LanguageStart
 async def help_com_group(client, message: Message, _):
+
     keyboard = private_help_panel(_)
-    await message.reply_text(_["help_2"], reply_markup=InlineKeyboardMarkup(keyboard))
+
+    await message.reply_text(
+        _["help_2"],
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
 
 @app.on_callback_query(filters.regex("^h:") & ~BANNED_USERS)
 @languageCB
 async def helper_cb(_, CallbackQuery, language):
+
+    await CallbackQuery.answer(cache_time=60)
+
     try:
         _, key = CallbackQuery.data.split(":")
     except:
         return await CallbackQuery.answer("Invalid!", show_alert=True)
 
     text = HELP_MAP.get(key)
+
     if not text:
         return await CallbackQuery.answer("Invalid!", show_alert=True)
 
     keyboard = help_back_markup(language)
 
     await CallbackQuery.edit_message_text(
-        text, reply_markup=keyboard, disable_web_page_preview=True
+        text,
+        reply_markup=keyboard,
+        disable_web_page_preview=True,
     )
 
 
 @app.on_callback_query(filters.regex('managebot123'))
 async def on_back_button(client, query):
+
+    await query.answer(cache_time=60)
+
     parts = query.data.split(None, 1)
+
     if len(parts) < 2:
         return
+
     cb = parts[1]
 
     chat_id = query.message.chat.id
-    language = await get_lang(chat_id)
-    _ = get_string(language)
 
-    keyboard = help_pannel(_, True)
+    language = await get_lang_cached(chat_id)
+    _ = get_string_cached(language)
+
+    keyboard = get_keyboard_cached(language, True)
 
     if cb == "settings_back_helper":
+
         await query.edit_message_text(
-            _["help_1"].format(SUPPORT_CHAT), reply_markup=keyboard
+            _["help_1"].format(SUPPORT_CHAT),
+            reply_markup=keyboard
         )
+
 
 @app.on_callback_query(filters.regex('mplus'))
 async def mb_plugin_button(client, query):
+
+    await query.answer(cache_time=60)
+
     parts = query.data.split(None, 1)
+
     if len(parts) < 2:
         return
 
@@ -147,10 +236,16 @@ async def mb_plugin_button(client, query):
     )
 
     if cb == "Okieeeeee":
+
         await query.edit_message_text(
             "`something errors`",
             reply_markup=keyboard,
             parse_mode=enums.ParseMode.MARKDOWN,
         )
+
     else:
-        await query.edit_message_text(getattr(Helper, cb), reply_markup=keyboard)
+
+        await query.edit_message_text(
+            getattr(Helper, cb),
+            reply_markup=keyboard
+        )
