@@ -134,7 +134,7 @@ async def download_video(link: str):
     
 
 async def check_file_size(link):
-    if not is_safe_youtube_url(link):
+    if not safe_yt_shell(link):
         return None
 
     async def get_format_info(link):
