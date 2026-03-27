@@ -39,8 +39,8 @@ import yt_dlp
 from pyrogram.enums import MessageEntityType
 from pyrogram.types import Message
 from py_yt import VideosSearch
-from Spy.utils.database import is_on_off, get_api_key
-from Spy.utils.formatters import time_to_seconds
+from SPOTIFY_MUSIC.utils.database import is_on_off
+from SPOTIFY_MUSIC.utils.formatters import time_to_seconds
 import os
 import glob
 import random
@@ -48,34 +48,29 @@ import logging
 import aiohttp
 import config
 from config import LOGGER_ID
-from Spy import app
+from SPOTIFY_MUSIC import app
 from config import BASE_URL, API_KEY
 from urllib.parse import urlparse
 
-# --- SECURITY PATCH: URL VALIDATION ---
 def is_safe_youtube_url(url: str) -> bool:
     try:
         p = urlparse(url)
         if p.scheme not in ("http", "https"):
             return False
-
         allowed = (
             "youtube.com",
             "www.youtube.com",
             "m.youtube.com",
             "youtu.be",
         )
-
         if not any(domain in p.netloc for domain in allowed):
             return False
-
-        # Block command injection characters
         if any(x in url for x in [";", "|", "$", "`", "\n", "\r"]):
             return False
-
         return True
     except Exception:
         return False
+
 
 def cookie_txt_file():
     cookie_dir = f"{os.getcwd()}/cookies"
@@ -182,8 +177,6 @@ async def check_file_size(link):
     return total_size
 
 async def shell_cmd(cmd):
-    # WARNING: This function still uses shell=True. 
-    # It should ONLY be used with internal commands, NOT user input.
     proc = await asyncio.create_subprocess_shell(
         cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -293,8 +286,6 @@ class YouTubeAPI:
         
         if not is_safe_youtube_url(link):
             return 0, "Invalid or unsafe URL."
-
-        # Try video API first
         try:
             downloaded_file = await download_video(link)
             if downloaded_file:
@@ -302,7 +293,6 @@ class YouTubeAPI:
         except Exception as e:
             print(f"Video API failed: {e}")
         
-        # Fallback to cookies
         cookie_file = cookie_txt_file()
         if not cookie_file:
             return 0, "No cookies found. Cannot download video."
@@ -329,7 +319,7 @@ class YouTubeAPI:
         if "&" in link:
             link = link.split("&")[0]
         
-        if not is_safe_youtube_url(link):
+        if not safe_yt_shell(link):
             return []
             
         cookie_file = cookie_txt_file()
@@ -390,7 +380,7 @@ class YouTubeAPI:
         if "&" in link:
             link = link.split("&")[0]
         
-        if not is_safe_youtube_url(link):
+        if not safe_yt_shell(link):
             return [], link
 
         cookie_file = cookie_txt_file()
@@ -460,7 +450,7 @@ class YouTubeAPI:
         if videoid:
             link = self.base + link
             
-        if not is_safe_youtube_url(link):
+        if not safe_yt_shell(link):
             return None, None
 
         loop = asyncio.get_running_loop()
