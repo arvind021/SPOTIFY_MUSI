@@ -29,72 +29,33 @@
 # || Use official API only -> www.babyapi.pro                      ||
 # ======================================================================
 
-
 import os
+from typing import List
 import yaml
 
 languages = {}
 languages_present = {}
 
-# ✅ Absolute path (har VPS me safe)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LANG_PATH = os.path.join(BASE_DIR, "strings", "langs")
-
-
 def get_string(lang: str):
-    # ✅ fallback to english if lang missing
-    return languages.get(lang, languages.get("en", {}))
-
-
-# ✅ Load English FIRST (mandatory)
-try:
-    en_file = os.path.join(LANG_PATH, "en.yml")
-    with open(en_file, encoding="utf8") as f:
-        languages["en"] = yaml.safe_load(f) or {}
-
-    if not isinstance(languages["en"], dict):
-        raise Exception("en.yml is not valid")
-
-    languages_present["en"] = languages["en"].get("name", "English")
-
-except Exception as e:
-    print(f"❌ Critical Error: en.yml load failed -> {e}")
-    exit()
-
-
-# ✅ Load other languages safely
-for filename in os.listdir(LANG_PATH):
-
-    # ❌ skip non-yml files (VERY IMPORTANT)
-    if not filename.endswith(".yml"):
-        continue
-
-    language_name = filename[:-4]
-
-    # skip english (already loaded)
-    if language_name == "en":
-        continue
-
+    return languages[lang]
+for filename in os.listdir(r"./strings/langs/"):
+    if "en" not in languages:
+        languages["en"] = yaml.safe_load(
+            open(r"./strings/langs/en.yml", encoding="utf8")
+        )
+        languages_present["en"] = languages["en"]["name"]
+    if filename.endswith(".yml"):
+        language_name = filename[:-4]
+        if language_name == "en":
+            continue
+        languages[language_name] = yaml.safe_load(
+            open(r"./strings/langs/" + filename, encoding="utf8")
+        )
+        for item in languages["en"]:
+            if item not in languages[language_name]:
+                languages[language_name][item] = languages["en"][item]
     try:
-        file_path = os.path.join(LANG_PATH, filename)
-
-        with open(file_path, encoding="utf8") as f:
-            data = yaml.safe_load(f) or {}
-
-        # ❌ invalid yaml structure
-        if not isinstance(data, dict):
-            raise Exception("Invalid YAML format")
-
-        # ✅ fallback missing keys from english
-        for key in languages["en"]:
-            if key not in data:
-                data[key] = languages["en"][key]
-
-        languages[language_name] = data
-
-        # ✅ safe name handling
-        languages_present[language_name] = data.get("name", language_name)
-
-    except Exception as e:
-        print(f"⚠️ Skipping {filename} بسبب error: {e}")
-        continue  # ❌ exit mat karo, next file load karo
+        languages_present[language_name] = languages[language_name]["name"]
+    except:
+        print("There is some issue with the language file inside bot.")
+        exit()
