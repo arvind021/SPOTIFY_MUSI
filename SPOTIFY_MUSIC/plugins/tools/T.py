@@ -25,7 +25,7 @@ async def d(_,q:CallbackQuery):
     if os.path.exists(p)and os.path.getsize(p)>0:return await f(q.message,p,v)
     try:
         async with aiohttp.ClientSession() as s:
-            async with s.get(f"{config.BASE_URL}/api/song?query={v}&api={config.API_KEY}") as r:res=await r.json()
+            async with s.get(f"{config.BASE_URL}/api/song?query={v}&download=true&api={config.API_KEY}") as r:res=await r.json()
             u=res.get("stream")
             if not u:return await q.message.reply("❌ Stream not found")
             for _ in range(60):
