@@ -89,7 +89,6 @@ async def send_song(client, message, file_path, vid):
 
     await message.reply_audio(
         audio=file_path,
-        caption=f"{title}\n\n⚡ Powered by @BabiesIQ",
         performer="BabiesIQ",   # ✅ Performer name
         title=title             # ✅ Song title
     )
