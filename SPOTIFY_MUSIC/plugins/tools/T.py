@@ -1,5 +1,5 @@
 import os
-import aiohttp
+import asyncio
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from py_yt import VideosSearch
@@ -12,7 +12,7 @@ DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-# 🔍 SONG SEARCH COMMAND
+# 🔍 SONG SEARCH
 @app.on_message(filters.command("song") & ~BANNED_USERS)
 async def song_search(client, message: Message):
     if len(message.command) < 2:
@@ -37,49 +37,49 @@ async def song_search(client, message: Message):
     )
 
 
-# 🎯 CALLBACK HANDLER
+# 🎯 CALLBACK
 @app.on_callback_query(filters.regex("^song_"))
 async def song_download(client, query: CallbackQuery):
     vid = query.data.split("_")[1]
-    url = f"https://www.youtube.com/watch?v={vid}"
     file_path = f"{DOWNLOAD_DIR}/{vid}.mp3"
 
     await query.answer("⏳ Processing...")
 
-    # ✅ 1. Check local file
-    if os.path.exists(file_path):
-        return await send_song(client, query.message, file_path, vid)
+    # ✅ DEBUG
+    print(f"[DEBUG] VID: {vid}")
+    print(f"[DEBUG] FILE PATH: {file_path}")
 
-    # ✅ 2. API CALL
+    # ✅ 1. Local check
+    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+        print("[DEBUG] Using cached file")
+        return await send_song(query.message, file_path, vid)
+
+    # ✅ 2. API direct download (CURL)
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{config.BASE_URL}/api/song?query={vid}&download=true&api={config.API_KEY}"
-            ) as resp:
-                data = await resp.json()
+        url = f"{config.BASE_URL}/api/song?query={vid}&download=true&api={config.API_KEY}"
 
-        stream = data.get("stream")
+        print(f"[DEBUG] CURL URL: {url}")
 
-        if not stream:
-            return await query.message.reply("❌ Download failed")
+        cmd = f'curl -L "{url}" -o "{file_path}"'
+        proc = await asyncio.create_subprocess_shell(cmd)
+        await proc.communicate()
 
-        # ✅ 3. Download file
-        async with aiohttp.ClientSession() as session:
-            async with session.get(stream) as r:
-                if r.status == 200:
-                    with open(file_path, "wb") as f:
-                        f.write(await r.read())
+        # verify file
+        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+            return await query.message.reply("❌ Download failed (empty file)")
 
     except Exception as e:
         return await query.message.reply(f"❌ Error: {e}")
 
-    # ✅ 4. Send file
-    await send_song(client, query.message, file_path, vid)
+    # ✅ 3. Send
+    await send_song(query.message, file_path, vid)
 
 
-# 📤 SEND SONG FUNCTION
-async def send_song(client, message, file_path, vid):
-    # 🎯 Get real title
+# 📤 SEND SONG
+async def send_song(message, file_path, vid):
+    print(f"[DEBUG] Sending file: {file_path}")
+
+    # 🎯 Title fetch
     try:
         search = VideosSearch(vid, limit=1)
         data = (await search.next())["result"][0]
@@ -87,8 +87,11 @@ async def send_song(client, message, file_path, vid):
     except:
         title = f"Song - {vid}"
 
-    await message.reply_audio(
-        audio=file_path,
-        performer="BabiesIQ",   # ✅ Performer name
-        title=title             # ✅ Song title
-    )
+    # ✅ IMPORTANT FIX
+    with open(file_path, "rb") as audio_file:
+        await message.reply_audio(
+            audio=audio_file,   # 🔥 FIXED
+            performer="BabiesIQ",
+            title=title,
+            caption=f"{title}\n\n⚡ Powered by @BabiesIQ"
+        )
