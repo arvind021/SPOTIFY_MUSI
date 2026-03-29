@@ -53,7 +53,7 @@ async def song_download(client, query: CallbackQuery):
         async with aiohttp.ClientSession() as session:
 
             # ✅ STEP 1: API call
-            api_url = f"{config.BASE_URL}/api/song?query={vid}&api={config.API_KEY}"
+            api_url = f"{config.BASE_URL}/api/song?query={vid}&download=true&api={config.API_KEY}"
             async with session.get(api_url) as resp:
                 res = await resp.json()
 
