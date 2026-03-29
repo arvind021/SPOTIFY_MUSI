@@ -1,5 +1,6 @@
 import os
 import asyncio
+import aiohttp
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from py_yt import VideosSearch
@@ -26,13 +27,12 @@ async def song_search(client, message: Message):
     for i, r in enumerate(results):
         title = r["title"][:40]
         vid = r["id"]
-
         buttons.append(
             [InlineKeyboardButton(f"{i+1}. {title}", callback_data=f"song_{vid}")]
         )
 
     await message.reply(
-        "🎵 **Select a song:**",
+        "🎵 Select a song:",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
@@ -45,41 +45,69 @@ async def song_download(client, query: CallbackQuery):
 
     await query.answer("⏳ Processing...")
 
-    # ✅ DEBUG
-    print(f"[DEBUG] VID: {vid}")
-    print(f"[DEBUG] FILE PATH: {file_path}")
-
-    # ✅ 1. Local check
+    # ✅ cache check
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-        print("[DEBUG] Using cached file")
         return await send_song(query.message, file_path, vid)
 
-    # ✅ 2. API direct download (CURL)
     try:
-        url = f"{config.BASE_URL}/api/song?query={vid}&download=true&api={config.API_KEY}"
+        async with aiohttp.ClientSession() as session:
 
-        print(f"[DEBUG] CURL URL: {url}")
+            # ✅ STEP 1: API call
+            api_url = f"{config.BASE_URL}/api/song?query={vid}&api={config.API_KEY}"
+            async with session.get(api_url) as resp:
+                res = await resp.json()
 
-        cmd = f'curl -L "{url}" -o "{file_path}"'
+            stream = res.get("stream")
+            media_type = res.get("type")
+
+            if not stream:
+                return await query.message.reply("❌ Stream not found")
+
+            print(f"[DEBUG] STREAM: {stream}")
+
+            # ✅ STEP 2: WAIT until ready
+            wait_time = 60  # total attempts
+
+            for i in range(wait_time):
+                async with session.get(stream) as r:
+                    print(f"[DEBUG] Attempt {i+1} → Status: {r.status}")
+
+                    if r.status == 200:
+                        print("[DEBUG] Stream ready ✅")
+                        break
+
+                    if r.status in (423, 404, 410):
+                        await asyncio.sleep(2)
+                        continue
+
+                    if r.status in (401, 403, 429):
+                        txt = await r.text()
+                        return await query.message.reply(
+                            f"❌ Blocked {r.status}"
+                        )
+
+                    return await query.message.reply(f"❌ Failed {r.status}")
+            else:
+                return await query.message.reply("❌ Processing timeout")
+
+        # ✅ STEP 3: DOWNLOAD AFTER READY
+        cmd = f'curl -L "{stream}" -o "{file_path}"'
         proc = await asyncio.create_subprocess_shell(cmd)
         await proc.communicate()
 
-        # verify file
+        # verify
         if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
-            return await query.message.reply("❌ Download failed (empty file)")
+            return await query.message.reply("❌ Download failed")
 
     except Exception as e:
         return await query.message.reply(f"❌ Error: {e}")
 
-    # ✅ 3. Send
+    # ✅ SEND
     await send_song(query.message, file_path, vid)
 
 
 # 📤 SEND SONG
 async def send_song(message, file_path, vid):
-    print(f"[DEBUG] Sending file: {file_path}")
-
-    # 🎯 Title fetch
     try:
         search = VideosSearch(vid, limit=1)
         data = (await search.next())["result"][0]
@@ -87,11 +115,9 @@ async def send_song(message, file_path, vid):
     except:
         title = f"Song - {vid}"
 
-    # ✅ IMPORTANT FIX
     with open(file_path, "rb") as audio_file:
         await message.reply_audio(
-            audio=audio_file,   # 🔥 FIXED
+            audio=audio_file,
             performer="BabiesIQ",
-            title=title,
-            caption=f"{title}\n\n⚡ Powered by @BabiesIQ"
+            title=title
         )
