@@ -27,7 +27,7 @@ async def video(_,m:Message):
 
 @app.on_callback_query(filters.regex("^(song|video)_"),group=5)
 async def dl(c,q:CallbackQuery):
-    typ,vid=q.data.split("_")
+    typ,vid=q.data.split("_",1)
     ext="mp3" if typ=="song" else "mp4"
     p=f"{D}/{vid}.{ext}"
     await q.answer()
@@ -114,38 +114,21 @@ async def send(c,m,p,vid,typ):
     try:await m.delete()
     except:pass
 
-    # 🔥 CHAT ACTION LOOP (real sending animation)
     async def action_loop(act):
         while True:
-            try:
-                await c.send_chat_action(m.chat.id,act)
+            try:await c.send_chat_action(m.chat.id,act)
             except:pass
             await asyncio.sleep(4)
 
-    if typ=="song":
-        act=ChatAction.UPLOAD_AUDIO
-    else:
-        act=ChatAction.UPLOAD_VIDEO
-
+    act=ChatAction.UPLOAD_AUDIO if typ=="song" else ChatAction.UPLOAD_VIDEO
     task=asyncio.create_task(action_loop(act))
 
     try:
         with open(p,"rb") as f:
             if typ=="song":
-                await c.send_audio(
-                    m.chat.id,
-                    f,
-                    performer="BabiesIQ",
-                    title=t,
-                    thumb=thumb_bytes
-                )
+                await c.send_audio(m.chat.id,f,performer="BabiesIQ",title=t,thumb=thumb_bytes)
             else:
-                await c.send_video(
-                    m.chat.id,
-                    f,
-                    caption=f"🎬 {t}",
-                    thumb=thumb_bytes
-                )
+                await c.send_video(m.chat.id,f,caption=f"🎬 {t}",thumb=thumb_bytes)
     finally:
         task.cancel()
 
