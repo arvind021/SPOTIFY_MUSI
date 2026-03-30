@@ -1,4 +1,4 @@
-import os,asyncio,aiohttp
+import os,asyncio,aiohttp,time
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup,InlineKeyboardButton,CallbackQuery,Message
 from py_yt import VideosSearch
@@ -8,19 +8,29 @@ from config import BANNED_USERS
 
 D="downloads";os.makedirs(D,exist_ok=True)
 
-@app.on_message(filters.command("song")&~BANNED_USERS,group=5)
-async def s(_,m:Message):
-    if len(m.command)<2:return await m.reply("❌ Usage: /song song name")
-    r=(await VideosSearch(" ".join(m.command[1:]),limit=10).next())["result"]
-    b=[[InlineKeyboardButton(f"{i+1}. {x['title'][:40]}",callback_data=f"song_{x['id']}")] for i,x in enumerate(r)]
-    txt=f"🎧 {m.from_user.mention}\n\n✨ Here is your song list\nTap below to download & enjoy smooth offline vibes 💫"
-    await m.reply(txt,reply_markup=InlineKeyboardMarkup(b))
+def kb(r,prefix):
+    return InlineKeyboardMarkup([[InlineKeyboardButton(f"{i+1}. {x['title'][:40]}",callback_data=f"{prefix}_{x['id']}")] for i,x in enumerate(r)])
 
-@app.on_callback_query(filters.regex("^song_"),group=5)
-async def d(c,q:CallbackQuery):
-    v=q.data.split("_")[1];p=f"{D}/{v}.mp3"
+@app.on_message(filters.command("song")&~BANNED_USERS,group=5)
+async def song(_,m:Message):
+    if len(m.command)<2:return await m.reply("❌ Usage: /song name")
+    r=(await VideosSearch(" ".join(m.command[1:]),limit=10).next())["result"]
+    await m.reply(f"🎧 {m.from_user.mention}\n\n✨ Select song\nSmooth offline vibes 💫",reply_markup=kb(r,"song"))
+
+@app.on_message(filters.command("video")&~BANNED_USERS,group=5)
+async def video(_,m:Message):
+    if len(m.command)<2:return await m.reply("❌ Usage: /video name")
+    r=(await VideosSearch(" ".join(m.command[1:]),limit=10).next())["result"]
+    await m.reply(f"🎬 {m.from_user.mention}\n\n✨ Select video\nTap to download ⚡",reply_markup=kb(r,"video"))
+
+@app.on_callback_query(filters.regex("^(song|video)_"),group=5)
+async def dl(c,q:CallbackQuery):
+    typ,vid=q.data.split("_")
+    ext="mp3" if typ=="song" else "mp4"
+    p=f"{D}/{vid}.{ext}"
     await q.answer()
 
+    start=time.time()
     stop=False
     percent=0
 
@@ -28,21 +38,23 @@ async def d(c,q:CallbackQuery):
         nonlocal percent
         while not stop:
             try:
+                elapsed=time.time()-start
+                speed=min(3,1+elapsed/5)  # smart speed
+                percent=min(95,int(percent+speed))
                 bar="▰"*(percent//10)+"▱"*(10-(percent//10))
-                await q.message.edit(f"⏳ Downloading...\n\n{bar} {percent}%")
-                if percent<95:percent+=1
+                await q.message.edit(f"⏳ Downloading {typ}...\n\n{bar} {percent}%")
             except:pass
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.4)
 
     task=asyncio.create_task(anim())
 
     if os.path.exists(p)and os.path.getsize(p)>0:
         stop=True
-        return await send(c,q.message,p,v)
+        return await send(c,q.message,p,vid,typ)
 
     try:
         async with aiohttp.ClientSession() as s:
-            async with s.get(f"{config.BASE_URL}/api/song?query={v}&download=true&api={config.API_KEY}") as r:
+            async with s.get(f"{config.BASE_URL}/api/{typ}?query={vid}&download=true&api={config.API_KEY}") as r:
                 res=await r.json()
             u=res.get("stream")
             if not u:
@@ -75,23 +87,27 @@ async def d(c,q:CallbackQuery):
 
     percent=100
     stop=True
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.8)
 
-    await send(c,q.message,p,v)
+    await send(c,q.message,p,vid,typ)
 
-async def send(c,m,p,v):
-    try:t=(await VideosSearch(v,limit=1).next())["result"][0]["title"]
-    except:t=f"Song - {v}"
+async def send(c,m,p,vid,typ):
+    try:t=(await VideosSearch(vid,limit=1).next())["result"][0]["title"]
+    except:t=f"{typ} - {vid}"
+
+    try:
+        await m.edit("📤 Uploading...\n\n▰▰▰▰▰▰▰▰▰▰ 100%")
+    except:pass
+
+    await asyncio.sleep(0.5)
 
     try:await m.delete()
     except:pass
 
-    with open(p,"rb") as a:
-        await c.send_audio(
-            m.chat.id,
-            a,
-            performer="BabiesIQ",
-            title=t
-        )
+    with open(p,"rb") as f:
+        if typ=="song":
+            await c.send_audio(m.chat.id,f,performer="BabiesIQ",title=t)
+        else:
+            await c.send_video(m.chat.id,f,caption=f"🎬 {t}")
 
     if os.path.exists(p):os.remove(p)
