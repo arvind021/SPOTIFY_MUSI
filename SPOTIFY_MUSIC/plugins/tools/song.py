@@ -4,7 +4,8 @@ from pyrogram.types import InlineKeyboardMarkup,InlineKeyboardButton,CallbackQue
 from py_yt import VideosSearch
 from SPOTIFY_MUSIC import app
 import config
-from config import BANNED_USERS,get_thumb
+from config import BANNED_USERS
+from SPOTIFY_MUSIC.utils.thumbnails import get_thumb
 
 D="downloads";os.makedirs(D,exist_ok=True)
 
