@@ -4,7 +4,7 @@ from pyrogram.types import InlineKeyboardMarkup,InlineKeyboardButton,CallbackQue
 from py_yt import VideosSearch
 from SPOTIFY_MUSIC import app
 import config
-from config import BANNED_USERS
+from config import BANNED_USERS,get_thumb
 
 D="downloads";os.makedirs(D,exist_ok=True)
 
@@ -39,14 +39,14 @@ async def dl(c,q:CallbackQuery):
         while not stop:
             try:
                 elapsed=time.time()-start
-                speed=min(3,1+elapsed/5)  # smart speed
+                speed=min(3,1+elapsed/5)
                 percent=min(95,int(percent+speed))
                 bar="▰"*(percent//10)+"▱"*(10-(percent//10))
                 await q.message.edit(f"⏳ Downloading {typ}...\n\n{bar} {percent}%")
             except:pass
             await asyncio.sleep(0.4)
 
-    task=asyncio.create_task(anim())
+    asyncio.create_task(anim())
 
     if os.path.exists(p)and os.path.getsize(p)>0:
         stop=True
@@ -104,10 +104,12 @@ async def send(c,m,p,vid,typ):
     try:await m.delete()
     except:pass
 
+    thumb=get_thumb(vid)
+
     with open(p,"rb") as f:
         if typ=="song":
-            await c.send_audio(m.chat.id,f,performer="BabiesIQ",title=t)
+            await c.send_audio(m.chat.id,f,performer="BabiesIQ",title=t,thumb=thumb)
         else:
-            await c.send_video(m.chat.id,f,caption=f"🎬 {t}")
+            await c.send_video(m.chat.id,f,caption=f"🎬 {t}",thumb=thumb)
 
     if os.path.exists(p):os.remove(p)
