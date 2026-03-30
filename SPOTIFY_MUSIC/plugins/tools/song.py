@@ -8,10 +8,7 @@ from config import BANNED_USERS
 
 D="downloads";os.makedirs(D,exist_ok=True)
 
-# 🔄 animation frames
-FRAMES=["▱▱▱▱▱","▰▱▱▱▱","▰▰▱▱▱","▰▰▰▱▱","▰▰▰▰▱","▰▰▰▰▰"]
-
-@app.on_message(filters.command("song")&~BANNED_USERS)
+@app.on_message(filters.command("song")&~BANNED_USERS,group=5)
 async def s(_,m:Message):
     if len(m.command)<2:return await m.reply("❌ Usage: /song song name")
     r=(await VideosSearch(" ".join(m.command[1:]),limit=10).next())["result"]
@@ -19,28 +16,28 @@ async def s(_,m:Message):
     txt=f"🎧 {m.from_user.mention}\n\n✨ Here is your song list\nTap below to download & enjoy smooth offline vibes 💫"
     await m.reply(txt,reply_markup=InlineKeyboardMarkup(b))
 
-@app.on_callback_query(filters.regex("^song_"))
+@app.on_callback_query(filters.regex("^song_"),group=5)
 async def d(c,q:CallbackQuery):
     v=q.data.split("_")[1];p=f"{D}/{v}.mp3"
     await q.answer()
 
-    # 🔥 start animation task
     stop=False
+    percent=0
+
     async def anim():
-        i=0
+        nonlocal percent
         while not stop:
             try:
-                bar=FRAMES[i%len(FRAMES)]
-                await q.message.edit(f"⏳ Downloading...\n\n{bar}")
-                i+=1
+                bar="▰"*(percent//10)+"▱"*(10-(percent//10))
+                await q.message.edit(f"⏳ Downloading...\n\n{bar} {percent}%")
+                if percent<95:percent+=1
             except:pass
-            await asyncio.sleep(0.7)
+            await asyncio.sleep(0.3)
 
     task=asyncio.create_task(anim())
 
     if os.path.exists(p)and os.path.getsize(p)>0:
         stop=True
-        await asyncio.sleep(1)
         return await send(c,q.message,p,v)
 
     try:
@@ -76,8 +73,10 @@ async def d(c,q:CallbackQuery):
         stop=True
         return await q.message.edit(f"❌ {str(e)[:80]}")
 
+    percent=100
     stop=True
     await asyncio.sleep(1)
+
     await send(c,q.message,p,v)
 
 async def send(c,m,p,v):
