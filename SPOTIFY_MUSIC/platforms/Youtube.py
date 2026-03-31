@@ -104,7 +104,7 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 100
                 return stream
             for _ in range(wait):
                 async with session.get(stream) as r:
-                    if r.status == 200:
+                    if r.status in (200, 206):
                         return stream
                     if r.status in (423, 404, 410):
                         await asyncio.sleep(2)
