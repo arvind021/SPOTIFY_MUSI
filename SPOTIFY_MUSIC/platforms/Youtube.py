@@ -93,7 +93,7 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 100
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                f"{BASE_URL}/api/{kind}?query={vid}&eq=pro&api={API_KEY}"
+                f"{BASE_URL}/api/{kind}?query={vid}&api={API_KEY}"
             ) as resp:
                 res = await resp.json()
             stream = res.get("stream")
