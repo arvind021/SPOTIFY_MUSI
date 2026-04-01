@@ -52,7 +52,7 @@ from SPOTIFY_MUSIC import app
 from config import BASE_URL, API_KEY
 from urllib.parse import urlparse, unquote
 
-STREAM_MODE = False  # True = download local stream | False = direct stream from API
+STREAM_MODE = True  # True = download local stream | False = direct stream from API
 
 def safe_yt_shell(url: str) -> bool:
     try:
@@ -95,23 +95,36 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
             _flag = "false" if STREAM_MODE else "true"
             api_url = f"{BASE_URL}/api/{kind}?query={vid}&download={_flag}&api={API_KEY}"
 
+            print(f"\n🔥 API URL: {api_url}")
+            print(f"⚙️ STREAM_MODE: {STREAM_MODE} | FLAG: {_flag}")
+
             async with s.get(api_url) as r:
+                print(f"📡 API STATUS: {r.status}")
                 res = await r.json()
+
+            print(f"📦 API RESPONSE: {res}")
 
             u = res.get("stream")
             media_type = res.get("type")
+
+            print(f"🔗 STREAM URL: {u}")
+            print(f"🎬 TYPE: {media_type}")
 
             if not u:
                 raise Exception("stream not found")
 
             if media_type == "live":
+                print("📡 LIVE STREAM DETECTED → RETURN")
                 return u
 
             # 🔥 wait until ready
-            for _ in range(wait):
+            for i in range(wait):
                 async with s.get(u) as r:
 
+                    print(f"⏳ CHECK {i+1}: STATUS = {r.status}")
+
                     if r.status in (200, 206):
+                        print("✅ STREAM READY")
                         break
 
                     if r.status in (204, 423, 404, 410):
@@ -125,24 +138,38 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
             else:
                 raise Exception("timeout")
 
-            # ✅ STREAM MODE → DIRECT RETURN
+            # ✅ STREAM MODE
             if STREAM_MODE:
+                print("🚀 RETURNING STREAM URL")
                 return u
 
             # ✅ DOWNLOAD MODE
             ext = "mp3" if kind == "song" else "mp4"
             filepath = f"downloads/{vid}.{ext}"
 
+            print(f"⬇️ DOWNLOADING TO: {filepath}")
+
             cmd = f'curl -L "{u}" -o "{filepath}" --max-time 120 -s'
+            print(f"⚙️ CMD: {cmd}")
+
             proc = await asyncio.create_subprocess_shell(cmd)
             await proc.communicate()
 
-            if not os.path.exists(filepath) or os.path.getsize(filepath) < 50000:
-                raise Exception("download failed")
+            if not os.path.exists(filepath):
+                raise Exception("file not created")
 
+            size = os.path.getsize(filepath)
+            print(f"📁 FILE SIZE: {size}")
+
+            if size < 50000:
+                raise Exception("download failed (too small)")
+
+            print("✅ DOWNLOAD SUCCESS")
             return filepath
 
     except Exception as e:
+        print(f"❌ ERROR: {e}")
+
         await app.send_message(
             LOGGER_ID,
             f"❌ **{kind.upper()} API ERROR**\n\n"
