@@ -92,7 +92,7 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
     try:
         async with aiohttp.ClientSession() as s:
 
-            _flag = "true" if STREAM_MODE else "false"
+            _flag = "false" if STREAM_MODE else "true"
             api_url = f"{BASE_URL}/api/{kind}?query={vid}&download={_flag}&api={API_KEY}"
 
             async with s.get(api_url) as r:
@@ -107,7 +107,7 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
             if media_type == "live":
                 return u
 
-            # 🔥 wait until ready (GET fix)
+            # 🔥 wait until ready
             for _ in range(wait):
                 async with s.get(u) as r:
 
@@ -125,14 +125,13 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
             else:
                 raise Exception("timeout")
 
-            # 🔥 STREAM MODE
-            if not STREAM_MODE:
+            # ✅ STREAM MODE → DIRECT RETURN
+            if STREAM_MODE:
                 return u
 
-            # 🔥 DOWNLOAD MODE
-            name = os.path.basename(urlparse(u).path)
-            name = unquote(name) if name else f"{vid}.mp3"
-            filepath = f"downloads/{name}"
+            # ✅ DOWNLOAD MODE
+            ext = "mp3" if kind == "song" else "mp4"
+            filepath = f"downloads/{vid}.{ext}"
 
             cmd = f'curl -L "{u}" -o "{filepath}" --max-time 120 -s'
             proc = await asyncio.create_subprocess_shell(cmd)
