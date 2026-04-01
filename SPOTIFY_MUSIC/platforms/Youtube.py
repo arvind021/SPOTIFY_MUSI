@@ -50,7 +50,9 @@ import config
 from config import LOGGER_ID
 from SPOTIFY_MUSIC import app
 from config import BASE_URL, API_KEY
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
+
+STREAM_MODE = True  # True = download local stream | False = direct stream from API
 
 def safe_yt_shell(url: str) -> bool:
     try:
@@ -82,13 +84,6 @@ def cookie_txt_file():
     cookie_file = os.path.join(cookie_dir, random.choice(cookies_files))
     return cookie_file
 
-
-import os
-import asyncio
-import aiohttp
-from urllib.parse import urlparse, unquote
-
-STREAM_MODE = True  # True = download local stream | False = direct stream from API 
 
 async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60):
     vid = link.split("v=")[-1].split("&")[0]
