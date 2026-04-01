@@ -52,7 +52,7 @@ from SPOTIFY_MUSIC import app
 from config import BASE_URL, API_KEY
 from urllib.parse import urlparse, unquote
 
-STREAM_MODE = True  # True = download local stream | False = direct stream from API
+STREAM_MODE = False  # True = download local stream | False = direct stream from API
 
 def safe_yt_shell(url: str) -> bool:
     try:
