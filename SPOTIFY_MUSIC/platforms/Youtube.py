@@ -88,40 +88,59 @@ def cookie_txt_file():
 async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60):
     vid = link.split("v=")[-1].split("&")[0]
     os.makedirs("downloads", exist_ok=True)
+
     try:
         async with aiohttp.ClientSession() as s:
-            download_flag = "true" if STREAM_MODE else "false"
-            api_url = f"{BASE_URL}/api/{kind}?query={vid}&download={download_flag}&api={API_KEY}"
+
+            _flag = "true" if STREAM_MODE else "false"
+            api_url = f"{BASE_URL}/api/{kind}?query={vid}&download={_flag}&api={API_KEY}"
+
             async with s.get(api_url) as r:
                 res = await r.json()
+
             u = res.get("stream")
             media_type = res.get("type")
+
             if not u:
                 raise Exception("stream not found")
+
             if media_type == "live":
                 return u
+
+            # 🔥 wait until ready (GET fix)
             for _ in range(wait):
-                async with s.head(u) as r:
+                async with s.get(u) as r:
+
                     if r.status in (200, 206):
                         break
-                    if r.status in (423, 404, 410):
+
+                    if r.status in (204, 423, 404, 410):
                         await asyncio.sleep(2)
                         continue
+
                     if r.status in (401, 403, 429):
                         raise Exception(f"blocked {r.status}")
+
                     raise Exception(f"failed {r.status}")
             else:
                 raise Exception("timeout")
+
+            # 🔥 STREAM MODE
             if not STREAM_MODE:
                 return u
+
+            # 🔥 DOWNLOAD MODE
             name = os.path.basename(urlparse(u).path)
             name = unquote(name) if name else f"{vid}.mp3"
             filepath = f"downloads/{name}"
+
             cmd = f'curl -L "{u}" -o "{filepath}" --max-time 120 -s'
             proc = await asyncio.create_subprocess_shell(cmd)
             await proc.communicate()
+
             if not os.path.exists(filepath) or os.path.getsize(filepath) < 50000:
                 raise Exception("download failed")
+
             return filepath
 
     except Exception as e:
