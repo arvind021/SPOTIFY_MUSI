@@ -43,8 +43,7 @@ def kill_ffmpeg(chat_id: int):
     try:
         if os.path.exists(pid_path):
             with open(pid_path) as f:
-                pid = int(f.read().strip())
-            os.kill(pid, 9)
+                os.kill(int(f.read().strip()), 9)
             os.remove(pid_path)
         else:
             os.system("pkill -9 ffmpeg")
@@ -109,47 +108,45 @@ async def play_stream(client, message):
         if not details:
             return await status.edit("❌ No track found")
 
-        # ================= DEBUG STREAM EXTRACTION =================
-        video_url = None
-        title = "Unknown"
+        vidid = None
+        title = query
 
         if isinstance(details, dict):
+            vidid = details.get("vidid") or track_id
             title = details.get("title") or query
 
-            video_url = (
-                details.get("stream_url")
-                or details.get("url")
-                or details.get("source")
-                or details.get("video_url")
-            )
-
-            logger.info(f"[EXTRACT] Dict URL: {video_url}")
-
         elif isinstance(details, str):
-            video_url = details
+            vidid = track_id
             title = query
-            logger.info(f"[EXTRACT] String URL: {video_url}")
 
-        # fallback logic (IMPORTANT)
-        if not video_url and track_id:
-            video_url = track_id
-            logger.info(f"[FALLBACK] Using track_id as URL: {video_url}")
+        if not vidid:
+            return await status.edit("❌ Video ID not found")
 
-        if not video_url:
-            logger.error("[ERROR] No stream URL found")
-            return await status.edit("❌ Stream URL not found (check logs)")
+        logger.info(f"[VIDID] {vidid}")
 
-        logger.info(f"[FINAL STREAM URL] {video_url}")
+        # ================= PLAY.PY STYLE DOWNLOAD =================
+        try:
+            file_path, direct = await YouTube.download(
+                vidid,
+                status,
+                videoid=True,
+                video=True
+            )
+        except Exception as e:
+            logger.error(f"[DOWNLOAD ERROR] {e}")
+            return await status.edit("❌ Download failed")
+
+        logger.info(f"[DOWNLOAD PATH] {file_path}")
 
     except Exception as e:
         logger.error(f"[YT ERROR] {e}")
         return await status.edit(f"❌ YouTube Error: {e}")
 
-    # ================ FFMPEG DEBUG ===================
+    # ================ FFMPEG STREAM ===================
     ffmpeg_command = [
         "ffmpeg",
         "-re",
-        "-i", video_url,
+        "-i", file_path,   # 🔥 LOCAL FILE ONLY
         "-c:v", "copy",
         "-c:a", "aac",
         "-f", "flv",
@@ -161,8 +158,8 @@ async def play_stream(client, message):
     try:
         process = subprocess.Popen(
             ffmpeg_command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
         )
 
         pid_path = PID_FILE.format(chat_id=group_id)
