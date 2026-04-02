@@ -1,5 +1,6 @@
 import os
 import subprocess
+import logging
 from pyrogram import Client, filters
 from pyrogram.enums import ChatType, ChatMemberStatus
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -8,6 +9,11 @@ from pymongo import MongoClient
 from config import MONGO_DB_URI
 from SPOTIFY_MUSIC import app
 from SPOTIFY_MUSIC import YouTube
+
+
+# ================ DEBUG LOG ===================
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("STREAM-DEBUG")
 
 
 # ================ DATABASE ===================
@@ -37,12 +43,13 @@ def kill_ffmpeg(chat_id: int):
     try:
         if os.path.exists(pid_path):
             with open(pid_path) as f:
-                os.kill(int(f.read().strip()), 9)
+                pid = int(f.read().strip())
+            os.kill(pid, 9)
             os.remove(pid_path)
         else:
             os.system("pkill -9 ffmpeg")
-    except:
-        pass
+    except Exception as e:
+        logger.error(f"FFMPEG kill error: {e}")
 
 
 # ================ RTMP ===================
@@ -69,7 +76,7 @@ async def set_rtmp_cmd(client, message):
     await message.reply(f"✅ RTMP set for {name}")
 
 
-# ================ PLAY STREAM ===================
+# ================ STREAM ===================
 @app.on_message(filters.command("playstream"))
 async def play_stream(client, message):
     chat = message.chat
@@ -90,37 +97,55 @@ async def play_stream(client, message):
     query = " ".join(message.command[1:])
     status = await message.reply(f"🔎 Searching: {query}")
 
+    logger.info(f"[SEARCH] Query: {query}")
+
     try:
-        # ================= PLAY.PY STYLE CORE =================
+        # ================= YOUTUBE CORE =================
         details, track_id = await YouTube.track(query)
+
+        logger.info(f"[YT RESPONSE] details: {details}")
+        logger.info(f"[YT RESPONSE] track_id: {track_id}")
 
         if not details:
             return await status.edit("❌ No track found")
 
-        # ================= EXTRACT STREAM URL =================
+        # ================= DEBUG STREAM EXTRACTION =================
         video_url = None
+        title = "Unknown"
 
-        # play.py style usually gives:
         if isinstance(details, dict):
+            title = details.get("title") or query
+
             video_url = (
-                details.get("url")
-                or details.get("stream_url")
+                details.get("stream_url")
+                or details.get("url")
                 or details.get("source")
+                or details.get("video_url")
             )
 
-        # fallback if object style
+            logger.info(f"[EXTRACT] Dict URL: {video_url}")
+
+        elif isinstance(details, str):
+            video_url = details
+            title = query
+            logger.info(f"[EXTRACT] String URL: {video_url}")
+
+        # fallback logic (IMPORTANT)
         if not video_url and track_id:
             video_url = track_id
+            logger.info(f"[FALLBACK] Using track_id as URL: {video_url}")
 
         if not video_url:
-            return await status.edit("❌ Stream URL not found in track")
+            logger.error("[ERROR] No stream URL found")
+            return await status.edit("❌ Stream URL not found (check logs)")
 
-        title = details.get("title") if isinstance(details, dict) else query
+        logger.info(f"[FINAL STREAM URL] {video_url}")
 
     except Exception as e:
+        logger.error(f"[YT ERROR] {e}")
         return await status.edit(f"❌ YouTube Error: {e}")
 
-    # ================ FFMPEG STREAM ===================
+    # ================ FFMPEG DEBUG ===================
     ffmpeg_command = [
         "ffmpeg",
         "-re",
@@ -131,8 +156,14 @@ async def play_stream(client, message):
         rtmp
     ]
 
+    logger.info(f"[FFMPEG CMD] {' '.join(ffmpeg_command)}")
+
     try:
-        process = subprocess.Popen(ffmpeg_command)
+        process = subprocess.Popen(
+            ffmpeg_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
 
         pid_path = PID_FILE.format(chat_id=group_id)
         with open(pid_path, "w") as f:
@@ -152,7 +183,10 @@ async def play_stream(client, message):
             ])
         )
 
+        logger.info("[STATUS] Streaming started successfully")
+
     except Exception as e:
+        logger.error(f"[FFMPEG ERROR] {e}")
         await message.reply(f"❌ FFmpeg Error: {e}")
 
 
@@ -174,5 +208,7 @@ async def end_stream(client, message):
             return await message.reply("❌ Error checking permission")
 
     kill_ffmpeg(chat.id)
+
+    logger.info(f"[STOP] Stream stopped by {user.id}")
 
     await message.reply(f"🛑 Stream stopped by {user.mention}")
