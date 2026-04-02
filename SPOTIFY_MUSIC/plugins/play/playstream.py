@@ -1,5 +1,4 @@
 import os
-import re
 import subprocess
 from pyrogram import Client, filters
 from pyrogram.enums import ChatType, ChatMemberStatus
@@ -8,8 +7,6 @@ from pymongo import MongoClient
 
 from config import MONGO_DB_URI
 from SPOTIFY_MUSIC import app
-
-# ✅ YouTube OBJECT (already initialized in __init__)
 from SPOTIFY_MUSIC import YouTube
 
 
@@ -18,7 +15,6 @@ mongo_client = MongoClient(MONGO_DB_URI)
 db = mongo_client["streambot"]
 rtmp_col = db["group_rtmp"]
 
-TMP_FILE = "/tmp/downloaded_video_{chat_id}.mp4"
 PID_FILE = "/tmp/ffmpeg_{chat_id}.pid"
 
 
@@ -41,8 +37,7 @@ def kill_ffmpeg(chat_id: int):
     try:
         if os.path.exists(pid_path):
             with open(pid_path) as f:
-                pid = int(f.read().strip())
-            os.kill(pid, 9)
+                os.kill(int(f.read().strip()), 9)
             os.remove(pid_path)
         else:
             os.system("pkill -9 ffmpeg")
@@ -81,13 +76,13 @@ async def play_stream(client, message):
     user = message.from_user
 
     if chat.type == ChatType.PRIVATE:
-        return await message.reply("⚠️ Use /playstream in group")
+        return await message.reply("⚠️ Use in group")
 
     group_id = chat.id
     rtmp = get_rtmp(group_id)
 
     if not rtmp:
-        return await message.reply("⚠️ RTMP not set for this group")
+        return await message.reply("⚠️ RTMP not set")
 
     if len(message.command) < 2:
         return await message.reply("❌ /playstream song name")
@@ -96,15 +91,31 @@ async def play_stream(client, message):
     status = await message.reply(f"🔎 Searching: {query}")
 
     try:
-        # ================= CORE YOUTUBE HANDLER =================
-        success, result = await YouTube.video(query)
+        # ================= PLAY.PY STYLE CORE =================
+        details, track_id = await YouTube.track(query)
 
-        if success != 1:
-            return await status.edit(f"❌ {result}")
+        if not details:
+            return await status.edit("❌ No track found")
 
-        # result = direct stream URL
-        video_url = result
-        title = query
+        # ================= EXTRACT STREAM URL =================
+        video_url = None
+
+        # play.py style usually gives:
+        if isinstance(details, dict):
+            video_url = (
+                details.get("url")
+                or details.get("stream_url")
+                or details.get("source")
+            )
+
+        # fallback if object style
+        if not video_url and track_id:
+            video_url = track_id
+
+        if not video_url:
+            return await status.edit("❌ Stream URL not found in track")
+
+        title = details.get("title") if isinstance(details, dict) else query
 
     except Exception as e:
         return await status.edit(f"❌ YouTube Error: {e}")
