@@ -86,39 +86,73 @@ def cookie_txt_file():
 
 
 
-async def _download_media(link: str, kind: str, exts: list[str], wait: int = 100):
+async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60):
     vid = link.split("v=")[-1].split("&")[0]
     os.makedirs("downloads", exist_ok=True)
-    for ext in exts:
-        path = f"downloads/{vid}.{ext}"
-        if os.path.exists(path):
-            return path
+
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{BASE_URL}/api/{kind}?query={vid}&api={API_KEY}"
-            ) as resp:
-                res = await resp.json()
-            stream = res.get("stream")
+        async with aiohttp.ClientSession() as s:
+
+            # ✅ SMART API URL (SHORT)
+            api_url = (
+                f"{BASE_URL}/api/{kind}?query={vid}&eq=pro&api={API_KEY}"
+                if STREAM_MODE
+                else f"{BASE_URL}/api/{kind}?query={vid}&download=true&api={API_KEY}"
+            )
+
+            async with s.get(api_url) as r:
+                res = await r.json()
+
+            u = res.get("stream")
             media_type = res.get("type")
-            if not stream:
-                raise Exception(f"{kind} stream not found")
+
+            if not u:
+                raise Exception("stream not found")
+
+            # 🔴 LIVE → direct return
             if media_type == "live":
-                return stream
+                return u
+
+            # ✅ STREAM MODE → OLD LOGIC (NO WAIT BUG)
+            if STREAM_MODE:
+                for _ in range(wait):
+                    async with s.get(u) as r:
+                        if r.status in (200, 206):
+                            return u
+                        if r.status in (423, 404, 410, 204):
+                            await asyncio.sleep(2)
+                            continue
+                        if r.status in (401, 403, 429):
+                            raise Exception(f"blocked {r.status}")
+                        raise Exception(f"failed {r.status}")
+                raise Exception("timeout")
+
+            # ✅ DOWNLOAD MODE → WAIT THEN DOWNLOAD
             for _ in range(wait):
-                async with session.get(stream) as r:
+                async with s.get(u) as r:
                     if r.status in (200, 206):
-                        return stream
-                    if r.status in (423, 404, 410):
+                        break
+                    if r.status in (423, 404, 410, 204):
                         await asyncio.sleep(2)
                         continue
                     if r.status in (401, 403, 429):
-                        txt = await r.text()
-                        raise Exception(
-                            f"{kind} blocked {r.status}: {txt[:100]}"
-                        )
-                    raise Exception(f"{kind} failed ({r.status})")
-            raise Exception(f"{kind} processing timeout")
+                        raise Exception(f"blocked {r.status}")
+                    raise Exception(f"failed {r.status}")
+            else:
+                raise Exception("timeout")
+
+            # 🔥 FIXED FILE NAME
+            ext = "mp3" if kind == "song" else "mp4"
+            filepath = f"downloads/{vid}.{ext}"
+
+            cmd = f'curl -L "{u}" -o "{filepath}" --max-time 120 -s'
+            proc = await asyncio.create_subprocess_shell(cmd)
+            await proc.communicate()
+
+            if not os.path.exists(filepath) or os.path.getsize(filepath) < 50000:
+                raise Exception("download failed")
+
+            return filepath
 
     except Exception as e:
         await app.send_message(
