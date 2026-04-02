@@ -95,7 +95,7 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
 
             # ✅ SMART API URL (SHORT)
             api_url = (
-                f"{BASE_URL}/api/{kind}?query={vid}&eq=pro&api={API_KEY}"
+                f"{BASE_URL}/api/{kind}?query={vid}&api={API_KEY}"
                 if STREAM_MODE
                 else f"{BASE_URL}/api/{kind}?query={vid}&download=true&api={API_KEY}"
             )
