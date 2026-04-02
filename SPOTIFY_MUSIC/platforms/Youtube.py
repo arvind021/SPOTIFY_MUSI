@@ -85,35 +85,24 @@ def cookie_txt_file():
     return cookie_file
 
 
-
 async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60):
     vid = link.split("v=")[-1].split("&")[0]
     os.makedirs("downloads", exist_ok=True)
-
     try:
         async with aiohttp.ClientSession() as s:
-
-            # ✅ SMART API URL (SHORT)
             api_url = (
                 f"{BASE_URL}/api/{kind}?query={vid}&api={API_KEY}"
                 if STREAM_MODE
                 else f"{BASE_URL}/api/{kind}?query={vid}&download=true&api={API_KEY}"
             )
-
             async with s.get(api_url) as r:
                 res = await r.json()
-
             u = res.get("stream")
             media_type = res.get("type")
-
             if not u:
                 raise Exception("stream not found")
-
-            # 🔴 LIVE → direct return
             if media_type == "live":
                 return u
-
-            # ✅ STREAM MODE → OLD LOGIC (NO WAIT BUG)
             if STREAM_MODE:
                 for _ in range(wait):
                     async with s.get(u) as r:
@@ -126,8 +115,6 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
                             raise Exception(f"blocked {r.status}")
                         raise Exception(f"failed {r.status}")
                 raise Exception("timeout")
-
-            # ✅ DOWNLOAD MODE → WAIT THEN DOWNLOAD
             for _ in range(wait):
                 async with s.get(u) as r:
                     if r.status in (200, 206):
@@ -140,18 +127,13 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
                     raise Exception(f"failed {r.status}")
             else:
                 raise Exception("timeout")
-
-            # 🔥 FIXED FILE NAME
             ext = "mp3" if kind == "song" else "mp4"
             filepath = f"downloads/{vid}.{ext}"
-
             cmd = f'curl -L "{u}" -o "{filepath}" --max-time 120 -s'
             proc = await asyncio.create_subprocess_shell(cmd)
             await proc.communicate()
-
             if not os.path.exists(filepath) or os.path.getsize(filepath) < 50000:
                 raise Exception("download failed")
-
             return filepath
 
     except Exception as e:
@@ -162,7 +144,6 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
             f"⚠️ `{str(e)[:120]}`"
         )
         raise
-
 
 
 async def download_song(link: str):
