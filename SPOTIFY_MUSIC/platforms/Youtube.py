@@ -86,96 +86,72 @@ def cookie_txt_file():
 
 
 
-async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60):
+async def _download_media(link: str, kind: str, exts: list[str], wait: int = 100):
     vid = link.split("v=")[-1].split("&")[0]
     os.makedirs("downloads", exist_ok=True)
 
-    try:
-        async with aiohttp.ClientSession() as s:
+    # 🔥 existing file check
+    for ext in exts:
+        path = f"downloads/{vid}.{ext}"
+        if os.path.exists(path):
+            return path
 
+    try:
+        async with aiohttp.ClientSession() as session:
+
+            # 🔥 new API flag
             _flag = "false" if STREAM_MODE else "true"
             api_url = f"{BASE_URL}/api/{kind}?query={vid}&download={_flag}&api={API_KEY}"
 
-            print("\n========== API REQUEST ==========")
-            print("URL:", api_url)
-            print("STREAM_MODE:", STREAM_MODE, "| FLAG:", _flag)
+            async with session.get(api_url) as resp:
+                res = await resp.json()
 
-            async with s.get(api_url) as r:
-                print("API STATUS:", r.status)
-                res = await r.json()
-
-            print("API RESPONSE:", res)
-
-            u = res.get("stream")
+            stream = res.get("stream")
             media_type = res.get("type")
 
-            print("STREAM URL:", u)
-            print("MEDIA TYPE:", media_type)
-
-            if not u:
-                raise Exception("stream not found")
+            if not stream:
+                raise Exception(f"{kind} stream not found")
 
             if media_type == "live":
-                print("LIVE STREAM → returning URL")
-                return u
+                return stream
 
-            print("\n========== CHECKING STREAM ==========")
-
-            for i in range(wait):
-                async with s.get(u) as r:
-                    print(f"TRY {i+1}: STATUS =", r.status)
+            # 🔥 EXACT OLD BEHAVIOR (IMPORTANT)
+            for _ in range(wait):
+                async with session.get(stream) as r:
 
                     if r.status in (200, 206):
-                        print("STREAM READY")
 
+                        # ✅ STREAM MODE → DIRECT RETURN (OLD STYLE)
                         if STREAM_MODE:
-                            print("RETURN → STREAM URL")
-                            return u
+                            return stream
 
-                        print("DOWNLOAD MODE → continue")
-                        break
+                        # ✅ DOWNLOAD MODE
+                        ext = "mp3" if kind == "song" else "mp4"
+                        filepath = f"downloads/{vid}.{ext}"
+
+                        proc = await asyncio.create_subprocess_shell(
+                            f'curl -L "{stream}" -o "{filepath}" --max-time 120 -s'
+                        )
+                        await proc.communicate()
+
+                        if not os.path.exists(filepath) or os.path.getsize(filepath) < 50000:
+                            raise Exception("download failed")
+
+                        return filepath
 
                     if r.status in (204, 423, 404, 410):
                         await asyncio.sleep(2)
                         continue
 
                     if r.status in (401, 403, 429):
-                        raise Exception(f"blocked {r.status}")
+                        txt = await r.text()
+                        raise Exception(f"{kind} blocked {r.status}: {txt[:100]}")
 
-                    raise Exception(f"failed {r.status}")
+                    raise Exception(f"{kind} failed ({r.status})")
 
-            else:
-                raise Exception("timeout")
-
-            # DOWNLOAD MODE
-            ext = "mp3" if kind == "song" else "mp4"
-            filepath = f"downloads/{vid}.{ext}"
-
-            print("\n========== DOWNLOADING ==========")
-            print("Saving to:", filepath)
-
-            cmd = f'curl -L "{u}" -o "{filepath}" --max-time 120 -s'
-            print("CMD:", cmd)
-
-            proc = await asyncio.create_subprocess_shell(cmd)
-            await proc.communicate()
-
-            if not os.path.exists(filepath):
-                raise Exception("file not created")
-
-            size = os.path.getsize(filepath)
-            print("FILE SIZE:", size)
-
-            if size < 50000:
-                raise Exception("download failed (too small)")
-
-            print("DOWNLOAD SUCCESS → returning file path")
-            return filepath
+            raise Exception(f"{kind} processing timeout")
 
     except Exception as e:
-        print("\n========== ERROR ==========")
-        print("ERROR:", str(e))
-
         await app.send_message(
             LOGGER_ID,
             f"❌ **{kind.upper()} API ERROR**\n\n"
@@ -183,6 +159,8 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
             f"⚠️ `{str(e)[:120]}`"
         )
         raise
+
+
 
 async def download_song(link: str):
     return await _download_media(link, "song", ["mp3", "m4a", "webm"], wait=60)
