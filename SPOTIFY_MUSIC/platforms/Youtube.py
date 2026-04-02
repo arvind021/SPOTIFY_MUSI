@@ -88,78 +88,39 @@ def cookie_txt_file():
 
 async def _download_media(link: str, kind: str, exts: list[str], wait: int = 100):
     vid = link.split("v=")[-1].split("&")[0]
-
-    print("\n========== START ==========")
-    print(f"🔗 LINK: {link}")
-    print(f"🎯 VID: {vid}")
-    print(f"📦 KIND: {kind}")
-
     os.makedirs("downloads", exist_ok=True)
-
-    # 🔍 CHECK LOCAL FILE FIRST
     for ext in exts:
         path = f"downloads/{vid}.{ext}"
-        print(f"📁 CHECK FILE: {path}")
         if os.path.exists(path):
-            size = os.path.getsize(path)
-            print(f"✅ FOUND LOCAL FILE: {path} | SIZE: {size}")
             return path
-
     try:
         async with aiohttp.ClientSession() as session:
-
-            api_url = f"{BASE_URL}/api/{kind}?query={vid}&api={API_KEY}"
-            print(f"\n🌐 API URL: {api_url}")
-
-            async with session.get(api_url) as resp:
-                print(f"📡 API STATUS: {resp.status}")
+            async with session.get(
+                f"{BASE_URL}/api/{kind}?query={vid}&api={API_KEY}"
+            ) as resp:
                 res = await resp.json()
-
-            print(f"📦 API RESPONSE: {res}")
-
             stream = res.get("stream")
             media_type = res.get("type")
-
-            print(f"🔗 STREAM URL: {stream}")
-            print(f"🎬 MEDIA TYPE: {media_type}")
-
             if not stream:
                 raise Exception(f"{kind} stream not found")
-
             if media_type == "live":
-                print("📡 LIVE STREAM → DIRECT RETURN")
                 return stream
-
-            print("\n========== CHECKING STREAM ==========")
-
-            for i in range(wait):
+            for _ in range(wait):
                 async with session.get(stream) as r:
-
-                    print(f"⏳ TRY {i+1}: STATUS = {r.status}")
-
                     if r.status in (200, 206):
-                        print("✅ STREAM READY → RETURN URL")
                         return stream
-
                     if r.status in (423, 404, 410):
-                        print("⏳ NOT READY → RETRY AFTER 2s")
                         await asyncio.sleep(2)
                         continue
-
                     if r.status in (401, 403, 429):
                         txt = await r.text()
-                        print(f"❌ BLOCKED: {r.status}")
-                        raise Exception(f"{kind} blocked {r.status}: {txt[:100]}")
-
-                    print(f"❌ FAILED STATUS: {r.status}")
+                        raise Exception(
+                            f"{kind} blocked {r.status}: {txt[:100]}"
+                        )
                     raise Exception(f"{kind} failed ({r.status})")
-
-            print("❌ TIMEOUT REACHED")
             raise Exception(f"{kind} processing timeout")
 
     except Exception as e:
-        print(f"❌ ERROR: {e}")
-
         await app.send_message(
             LOGGER_ID,
             f"❌ **{kind.upper()} API ERROR**\n\n"
@@ -167,6 +128,9 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 100
             f"⚠️ `{str(e)[:120]}`"
         )
         raise
+
+
+
 async def download_song(link: str):
     return await _download_media(link, "song", ["mp3", "m4a", "webm"], wait=60)
 
