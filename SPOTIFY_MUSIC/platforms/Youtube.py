@@ -85,6 +85,7 @@ def cookie_txt_file():
     return cookie_file
 
 
+
 async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60):
     vid = link.split("v=")[-1].split("&")[0]
     os.makedirs("downloads", exist_ok=True)
@@ -95,26 +96,43 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
             _flag = "false" if STREAM_MODE else "true"
             api_url = f"{BASE_URL}/api/{kind}?query={vid}&download={_flag}&api={API_KEY}"
 
+            print("\n========== API REQUEST ==========")
+            print("URL:", api_url)
+            print("STREAM_MODE:", STREAM_MODE, "| FLAG:", _flag)
+
             async with s.get(api_url) as r:
+                print("API STATUS:", r.status)
                 res = await r.json()
+
+            print("API RESPONSE:", res)
 
             u = res.get("stream")
             media_type = res.get("type")
+
+            print("STREAM URL:", u)
+            print("MEDIA TYPE:", media_type)
 
             if not u:
                 raise Exception("stream not found")
 
             if media_type == "live":
+                print("LIVE STREAM → returning URL")
                 return u
 
-            # 🔥 wait until ready (FIXED)
-            for _ in range(wait):
+            print("\n========== CHECKING STREAM ==========")
+
+            for i in range(wait):
                 async with s.get(u) as r:
+                    print(f"TRY {i+1}: STATUS =", r.status)
 
                     if r.status in (200, 206):
-                        # ✅ STREAM MODE → DIRECT RETURN
+                        print("STREAM READY")
+
                         if STREAM_MODE:
+                            print("RETURN → STREAM URL")
                             return u
+
+                        print("DOWNLOAD MODE → continue")
                         break
 
                     if r.status in (204, 423, 404, 410):
@@ -125,23 +143,39 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
                         raise Exception(f"blocked {r.status}")
 
                     raise Exception(f"failed {r.status}")
+
             else:
                 raise Exception("timeout")
 
-            # ✅ DOWNLOAD MODE
+            # DOWNLOAD MODE
             ext = "mp3" if kind == "song" else "mp4"
             filepath = f"downloads/{vid}.{ext}"
 
+            print("\n========== DOWNLOADING ==========")
+            print("Saving to:", filepath)
+
             cmd = f'curl -L "{u}" -o "{filepath}" --max-time 120 -s'
+            print("CMD:", cmd)
+
             proc = await asyncio.create_subprocess_shell(cmd)
             await proc.communicate()
 
-            if not os.path.exists(filepath) or os.path.getsize(filepath) < 50000:
-                raise Exception("download failed")
+            if not os.path.exists(filepath):
+                raise Exception("file not created")
 
+            size = os.path.getsize(filepath)
+            print("FILE SIZE:", size)
+
+            if size < 50000:
+                raise Exception("download failed (too small)")
+
+            print("DOWNLOAD SUCCESS → returning file path")
             return filepath
 
     except Exception as e:
+        print("\n========== ERROR ==========")
+        print("ERROR:", str(e))
+
         await app.send_message(
             LOGGER_ID,
             f"❌ **{kind.upper()} API ERROR**\n\n"
@@ -149,7 +183,6 @@ async def _download_media(link: str, kind: str, exts: list[str], wait: int = 60)
             f"⚠️ `{str(e)[:120]}`"
         )
         raise
-
 
 async def download_song(link: str):
     return await _download_media(link, "song", ["mp3", "m4a", "webm"], wait=60)
