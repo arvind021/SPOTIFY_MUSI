@@ -9,7 +9,7 @@ from pymongo import MongoClient
 from config import MONGO_DB_URI
 from SPOTIFY_MUSIC import app
 
-# ✅ ONLY YOUR YOUTUBE CORE
+# ✅ YouTube OBJECT (already initialized in __init__)
 from SPOTIFY_MUSIC import YouTube
 
 
@@ -96,17 +96,14 @@ async def play_stream(client, message):
     status = await message.reply(f"🔎 Searching: {query}")
 
     try:
-        yt = YouTube()
-
         # ================= CORE YOUTUBE HANDLER =================
-        success, result = await yt.video(query)
+        success, result = await YouTube.video(query)
 
         if success != 1:
             return await status.edit(f"❌ {result}")
 
-        # result = direct stream URL from youtube.py
+        # result = direct stream URL
         video_url = result
-
         title = query
 
     except Exception as e:
