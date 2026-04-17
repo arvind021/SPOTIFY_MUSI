@@ -57,7 +57,7 @@ HEROKU_APP_NAME = getenv("HEROKU_APP_NAME")
 HEROKU_API_KEY = getenv("HEROKU_API_KEY")
 UPSTREAM_REPO = getenv(
     "UPSTREAM_REPO",
-    "https://github.com/BABY-MUSIC/SPOTIFY_MUSIC",
+    "https://github.com/BABY-MUSIC/SPOTIFY_MUSI",
 )
 UPSTREAM_BRANCH = getenv("UPSTREAM_BRANCH", "main")
 GIT_TOKEN = getenv(
@@ -65,10 +65,10 @@ GIT_TOKEN = getenv(
 )
 # ------------------------------------------------------------------------
 # -------------------------------------------------------------------------
-SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/+gF7M1_0PC803ZjU9")
-SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/YTM_Points")
-SOURCE = getenv("SOURCE", "https://github.com/BABY-MUSIC/SPOTIFY_MUSIC")
-CHAT = getenv("CHAT", "https://t.me/+q43QONRtkrg5NGFk")
+SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/gF7M10PC803ZjU9")
+SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/TM_Points")
+SOURCE = getenv("SOURCE", "https://github.com/BABY-MIC/SPOTIFY_MUSIC")
+CHAT = getenv("CHAT", "https://t.me/+q43QONRtk5NGFk")
 # --------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------
 AUTO_LEAVING_ASSISTANT = getenv("AUTO_LEAVING_ASSISTANT", "False")
